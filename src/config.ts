@@ -12,6 +12,7 @@ import {
   type CodexLaunchProfile,
   type CodexSandboxMode,
 } from "./codex-launch.js";
+import { loadProjectsConfig, type RegisteredProject } from "./projects.js";
 
 export type ToolVerbosity = "all" | "summary" | "errors-only" | "none";
 
@@ -32,6 +33,9 @@ export interface TeleCodexConfig {
   showTurnTokenUsage: boolean;
   enableTelegramLogin: boolean;
   enableTelegramReactions: boolean;
+  projectsConfig?: string;
+  projectsRoot: string;
+  projects: RegisteredProject[];
 }
 
 export function loadConfig(): TeleCodexConfig {
@@ -66,6 +70,9 @@ export function loadConfig(): TeleCodexConfig {
     optionalString(process.env.ENABLE_TELEGRAM_REACTIONS),
     false,
   );
+  const projectsConfig = resolveOptionalPath(optionalString(process.env.PROJECTS_CONFIG));
+  const projectsRoot = resolveProjectsRoot();
+  const projects = loadProjectsConfig(projectsConfig, projectsRoot);
 
   return {
     telegramBotToken,
@@ -84,6 +91,9 @@ export function loadConfig(): TeleCodexConfig {
     showTurnTokenUsage,
     enableTelegramLogin,
     enableTelegramReactions,
+    projectsConfig,
+    projectsRoot,
+    projects,
   };
 }
 
@@ -97,6 +107,18 @@ function resolveWorkspace(): string {
     return "/workspace";
   }
   return process.cwd();
+}
+
+function resolveProjectsRoot(): string {
+  const configured = optionalString(process.env.PROJECTS_ROOT);
+  if (configured) {
+    return path.resolve(configured);
+  }
+  return isRunningInDocker() ? "/data/projects" : path.resolve(process.cwd(), "projects");
+}
+
+function resolveOptionalPath(value: string | undefined): string | undefined {
+  return value ? path.resolve(value) : undefined;
 }
 
 function isRunningInDocker(): boolean {

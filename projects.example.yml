@@ -1,0 +1,12 @@
+# This file is read on the server, not supplied by Telegram users.
+# Each path is the container path below PROJECTS_ROOT.
+projects:
+  company-api:
+    name: Company API
+    path: /data/projects/company-api
+    base_branch: main
+
+  company-web:
+    name: Company Web
+    path: /data/projects/company-web
+    base_branch: develop

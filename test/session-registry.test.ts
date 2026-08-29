@@ -111,6 +111,9 @@ describe("SessionRegistry", () => {
     showTurnTokenUsage: false,
     enableTelegramLogin: true,
     enableTelegramReactions: false,
+    projectsConfig: undefined,
+    projectsRoot: "/projects",
+    projects: [],
     ...overrides,
   });
 
@@ -204,6 +207,48 @@ describe("SessionRegistry", () => {
 
     expect(registry.has("67890:1")).toBe(false);
     expect(registry.has("67890:2")).toBe(true);
+  });
+
+  it("keeps project selections isolated by topic and creates sessions in the selected project", async () => {
+    const projects = [
+      { id: "api", name: "API", path: "/projects/api", baseBranch: "main" },
+      { id: "web", name: "Web", path: "/projects/web", baseBranch: "develop" },
+    ];
+    const config = createConfig({ projects });
+    const registry = new SessionRegistry(config);
+
+    registry.setProject("67890:1", projects[0]!);
+    registry.setProject("67890:2", projects[1]!);
+
+    await registry.getOrCreate("67890:1", { deferThreadStart: true });
+    await registry.getOrCreate("67890:2", { deferThreadStart: true });
+
+    expect(registry.getSelectedProject("67890:1")).toEqual(projects[0]);
+    expect(registry.getSelectedProject("67890:2")).toEqual(projects[1]);
+    registry.markProjectInstructionsApplied("67890:1");
+    expect(registry.shouldApplyProjectInstructions("67890:1")).toBeUndefined();
+    registry.resetProjectInstructions("67890:1");
+    expect(registry.shouldApplyProjectInstructions("67890:1")).toEqual(projects[0]);
+    expect(mockSessionState.create).toHaveBeenNthCalledWith(1, config, {
+      workspace: "/projects/api",
+      model: undefined,
+      reasoningEffort: undefined,
+      launchProfileId: undefined,
+      deferThreadStart: true,
+      resumeThreadId: undefined,
+    });
+    expect(mockSessionState.create).toHaveBeenNthCalledWith(2, config, {
+      workspace: "/projects/web",
+      model: undefined,
+      reasoningEffort: undefined,
+      launchProfileId: undefined,
+      deferThreadStart: true,
+      resumeThreadId: undefined,
+    });
+
+    const reloaded = new SessionRegistry(config);
+    expect(reloaded.getSelectedProject("67890:1")).toEqual(projects[0]);
+    expect(reloaded.getSelectedProject("67890:2")).toEqual(projects[1]);
   });
 
   it("restores distinct per-context workspace, model, reasoning effort, and thread ids", async () => {

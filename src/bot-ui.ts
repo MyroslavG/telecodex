@@ -23,6 +23,14 @@ export function renderHelpMessage(): DualText {
       ],
     },
     {
+      title: "📂 Projects",
+      commands: [
+        ["/projects", "List registered projects"],
+        ["/project", "View or select a project"],
+        ["/pr", "Current branch pull request"],
+      ],
+    },
+    {
       title: "🤖 Model",
       commands: [
         ["/launch_profiles", "Select launch profile"],

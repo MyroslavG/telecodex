@@ -13,6 +13,8 @@ telecodex.log
 
 # Runtime workspace (Docker mount)
 workspace/
+data/
+projects.yml
 
 # Agent tooling (local dev only)
 agent-tools/

@@ -5,6 +5,7 @@ import { findLaunchProfile } from "./codex-launch.js";
 import { CodexSessionService } from "./codex-session.js";
 import type { TeleCodexConfig } from "./config.js";
 import type { TelegramContextKey } from "./context-key.js";
+import { getProjectById, type RegisteredProject } from "./projects.js";
 
 export interface ContextMetadata {
   contextKey: TelegramContextKey;
@@ -13,6 +14,8 @@ export interface ContextMetadata {
   model?: string;
   reasoningEffort?: string;
   launchProfileId?: string;
+  projectId?: string;
+  projectInstructionsApplied?: boolean;
   updatedAt: number;
 }
 
@@ -38,8 +41,12 @@ export class SessionRegistry {
 
     const meta = this.metadata.get(contextKey);
     const launchProfileId = resolveLaunchProfileId(this.config, meta);
+    const project = this.getSelectedProject(contextKey);
+    if (meta?.projectId && !project) {
+      throw new Error("The selected project is no longer configured. Use /project to select one.");
+    }
     session = await CodexSessionService.create(this.config, {
-      workspace: meta?.workspace,
+      workspace: project?.path ?? meta?.workspace,
       model: meta?.model,
       reasoningEffort: meta?.reasoningEffort,
       launchProfileId,
@@ -65,6 +72,7 @@ export class SessionRegistry {
 
   updateMetadata(contextKey: TelegramContextKey, session: CodexSessionService): void {
     const info = session.getInfo();
+    const previous = this.metadata.get(contextKey);
     this.metadata.set(contextKey, {
       contextKey,
       threadId: info.threadId,
@@ -72,6 +80,12 @@ export class SessionRegistry {
       model: info.model,
       reasoningEffort: info.reasoningEffort,
       launchProfileId: info.nextLaunchProfileId ?? info.launchProfileId,
+      ...(previous?.projectId
+        ? {
+            projectId: previous.projectId,
+            projectInstructionsApplied: previous.projectInstructionsApplied,
+          }
+        : {}),
       updatedAt: Date.now(),
     });
     this.persistMetadata();
@@ -79,6 +93,59 @@ export class SessionRegistry {
 
   listContexts(): ContextMetadata[] {
     return [...this.metadata.values()].sort((left, right) => right.updatedAt - left.updatedAt);
+  }
+
+  getSelectedProject(contextKey: TelegramContextKey): RegisteredProject | undefined {
+    return getProjectById(this.config.projects, this.metadata.get(contextKey)?.projectId);
+  }
+
+  setProject(contextKey: TelegramContextKey, project: RegisteredProject): void {
+    const previous = this.metadata.get(contextKey);
+    if (previous?.projectId === project.id) {
+      return;
+    }
+    this.sessions.get(contextKey)?.dispose();
+    this.sessions.delete(contextKey);
+    this.metadata.set(contextKey, {
+      contextKey,
+      threadId: null,
+      workspace: project.path,
+      model: previous?.model,
+      reasoningEffort: previous?.reasoningEffort,
+      launchProfileId: previous?.launchProfileId,
+      projectId: project.id,
+      projectInstructionsApplied: false,
+      updatedAt: Date.now(),
+    });
+    this.persistMetadata();
+  }
+
+  resetProjectInstructions(contextKey: TelegramContextKey): void {
+    const metadata = this.metadata.get(contextKey);
+    if (!metadata?.projectId) {
+      return;
+    }
+    metadata.projectInstructionsApplied = false;
+    metadata.updatedAt = Date.now();
+    this.persistMetadata();
+  }
+
+  shouldApplyProjectInstructions(contextKey: TelegramContextKey): RegisteredProject | undefined {
+    const metadata = this.metadata.get(contextKey);
+    if (!metadata || metadata.projectInstructionsApplied) {
+      return undefined;
+    }
+    return this.getSelectedProject(contextKey);
+  }
+
+  markProjectInstructionsApplied(contextKey: TelegramContextKey): void {
+    const metadata = this.metadata.get(contextKey);
+    if (!metadata?.projectId) {
+      return;
+    }
+    metadata.projectInstructionsApplied = true;
+    metadata.updatedAt = Date.now();
+    this.persistMetadata();
   }
 
   onRemove(callback: (contextKey: TelegramContextKey) => void): void {

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -27,6 +27,8 @@ describe("loadConfig", () => {
     delete process.env.MAX_FILE_SIZE;
     delete process.env.ENABLE_TELEGRAM_LOGIN;
     delete process.env.ENABLE_TELEGRAM_REACTIONS;
+    delete process.env.PROJECTS_CONFIG;
+    delete process.env.PROJECTS_ROOT;
     delete process.env.container;
   });
 
@@ -101,6 +103,9 @@ describe("loadConfig", () => {
       showTurnTokenUsage: false,
       enableTelegramLogin: true,
       enableTelegramReactions: false,
+      projectsConfig: undefined,
+      projectsRoot: path.join(process.cwd(), "projects"),
+      projects: [],
     });
   });
 
@@ -221,6 +226,35 @@ describe("loadConfig", () => {
     const config = loadConfig();
 
     expect(config.workspace).toBe("/workspace");
+  });
+
+  it("loads registered projects from PROJECTS_CONFIG", () => {
+    const projectsRoot = path.join(tempDir, "projects");
+    const projectPath = path.join(projectsRoot, "kolo");
+    const projectsConfig = path.join(tempDir, "projects.yml");
+    mkdirSync(projectPath, { recursive: true });
+    writeFileSync(
+      projectsConfig,
+      [
+        "projects:",
+        "  kolo:",
+        "    name: Kolo",
+        `    path: ${projectPath}`,
+        "    base_branch: main",
+      ].join("\n"),
+    );
+    process.env.TELEGRAM_BOT_TOKEN = "bot-token";
+    process.env.TELEGRAM_ALLOWED_USER_IDS = "123";
+    process.env.PROJECTS_ROOT = projectsRoot;
+    process.env.PROJECTS_CONFIG = projectsConfig;
+
+    const config = loadConfig();
+
+    expect(config.projectsConfig).toBe(projectsConfig);
+    expect(config.projectsRoot).toBe(projectsRoot);
+    expect(config.projects).toEqual([
+      { id: "kolo", name: "Kolo", path: projectPath, baseBranch: "main" },
+    ]);
   });
 
   it("parses MAX_FILE_SIZE when configured", () => {

@@ -3,8 +3,13 @@ services:
     build: .
     env_file: .env
     volumes:
-      - ${HOME}/.codex:/home/telecodex/.codex:rw
-      - ./workspace:/workspace:rw
+      - ${TELECODEX_DATA_HOST:-./data}:/workspace:rw
+      - ${PROJECTS_ROOT_HOST:?Set PROJECTS_ROOT_HOST in .env}:/data/projects:rw
+      - ${PROJECTS_CONFIG_HOST:?Set PROJECTS_CONFIG_HOST in .env}:/data/config/projects.yml:ro
+      - ${CODEX_HOME_HOST:-./data/codex}:/home/telecodex/.codex:rw
+      - ${GH_CONFIG_HOME_HOST:-./data/gh}:/home/telecodex/.config/gh:rw
+      - ${GIT_CONFIG_HOME_HOST:-./data/git}:/home/telecodex/.config/git:rw
+      - ${SSH_DIR_HOST:-./data/ssh}:/home/telecodex/.ssh:ro
     cap_drop:
       - ALL
     security_opt:

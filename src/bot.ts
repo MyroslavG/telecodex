@@ -27,6 +27,7 @@ import {
   type CodexSessionInfo,
   type CodexSessionService,
 } from "./codex-session.js";
+import { withDevelopmentInstructions } from "./development-instructions.js";
 import { checkAuthStatus, clearAuthCache, startLogin, startLogout } from "./codex-auth.js";
 import {
   findLaunchProfile,
@@ -34,11 +35,13 @@ import {
   formatLaunchProfileLabel,
 } from "./codex-launch.js";
 import { getThread } from "./codex-state.js";
+import { getCurrentPullRequest } from "./github.js";
 import type { TeleCodexConfig, ToolVerbosity } from "./config.js";
 import { contextKeyFromCtx, isTopicContextKey, parseContextKey, type TelegramContextKey } from "./context-key.js";
 import { friendlyErrorText } from "./error-messages.js";
 import { escapeHTML, formatTelegramHTML } from "./format.js";
 import { SessionRegistry } from "./session-registry.js";
+import { getProjectById, renderProjectsPlain, type RegisteredProject } from "./projects.js";
 import { getAvailableBackends, transcribeAudio } from "./voice.js";
 
 const TELEGRAM_MESSAGE_LIMIT = 4000;
@@ -693,7 +696,14 @@ export function createBot(config: TeleCodexConfig, registry: SessionRegistry): B
         return;
       }
 
-      await session.prompt(userInput, callbacks);
+      const projectInstructions = registry.shouldApplyProjectInstructions(contextKey);
+      const promptInput = projectInstructions
+        ? prependProjectInstructions(userInput, projectInstructions)
+        : userInput;
+      await session.prompt(promptInput, callbacks);
+      if (projectInstructions) {
+        registry.markProjectInstructionsApplied(contextKey);
+      }
       updateSessionMetadata(contextKey, session);
       await finalizeResponse();
     } catch (error) {
@@ -971,6 +981,100 @@ export function createBot(config: TeleCodexConfig, registry: SessionRegistry): B
     });
   });
 
+  bot.command("projects", async (ctx) => {
+    const plain = renderProjectsPlain(config.projects);
+    await safeReply(ctx, `<b>Projects</b>\n\n${escapeHTML(plain.replace(/^Projects\n\n/, ""))}`, {
+      fallbackText: plain,
+    });
+  });
+
+  bot.command("project", async (ctx) => {
+    const contextKey = contextKeyFromCtx(ctx);
+    if (!contextKey) {
+      return;
+    }
+    const rawText = ctx.message?.text ?? "";
+    const projectId = rawText.replace(/^\/project(?:@\w+)?\s*/, "").trim();
+    if (!projectId) {
+      const selectedProject = registry.getSelectedProject(contextKey);
+      if (!selectedProject) {
+        await safeReply(ctx, escapeHTML("No project selected. Use /projects, then /project <project-id>."), {
+          fallbackText: "No project selected. Use /projects, then /project <project-id>.",
+        });
+        return;
+      }
+      await safeReply(
+        ctx,
+        `<b>Current project:</b>\n\n${escapeHTML(selectedProject.name)}\n<code>${escapeHTML(selectedProject.path)}</code>\nBase branch: <code>${escapeHTML(selectedProject.baseBranch)}</code>`,
+        {
+          fallbackText: `Current project:\n\n${selectedProject.name}\n${selectedProject.path}\nBase branch: ${selectedProject.baseBranch}`,
+        },
+      );
+      return;
+    }
+    const project = getProjectById(config.projects, projectId);
+    if (!project) {
+      await safeReply(ctx, escapeHTML(`Unknown project: ${projectId}. Use /projects.`), {
+        fallbackText: `Unknown project: ${projectId}. Use /projects.`,
+      });
+      return;
+    }
+    if (isBusy(contextKey)) {
+      await safeReply(ctx, escapeHTML("Cannot change project while a prompt is running."), {
+        fallbackText: "Cannot change project while a prompt is running.",
+      });
+      return;
+    }
+    registry.setProject(contextKey, project);
+    pendingWorkspacePicks.delete(contextKey);
+    pendingWorkspaceButtons.delete(contextKey);
+    pendingSessionPicks.delete(contextKey);
+    pendingSessionButtons.delete(contextKey);
+    await safeReply(
+      ctx,
+      `<b>Project selected:</b>\n\n${escapeHTML(project.name)}\nBase branch: <code>${escapeHTML(project.baseBranch)}</code>`,
+      { fallbackText: `Project selected:\n\n${project.name}\nBase branch: ${project.baseBranch}` },
+    );
+  });
+
+  bot.command("pr", async (ctx) => {
+    const contextKey = contextKeyFromCtx(ctx);
+    if (!contextKey) {
+      return;
+    }
+    const project = registry.getSelectedProject(contextKey);
+    if (!project) {
+      await safeReply(ctx, escapeHTML("No project selected. Use /project <project-id> first."), {
+        fallbackText: "No project selected. Use /project <project-id> first.",
+      });
+      return;
+    }
+    if (isBusy(contextKey)) {
+      await sendBusyReply(ctx);
+      return;
+    }
+    try {
+      const pullRequest = await getCurrentPullRequest(project);
+      if (!pullRequest) {
+        await safeReply(ctx, escapeHTML("No pull request found for the current branch."), {
+          fallbackText: "No pull request found for the current branch.",
+        });
+        return;
+      }
+      await safeReply(
+        ctx,
+        `<b>PR #${pullRequest.number}</b>\n${escapeHTML(pullRequest.title)}\n<code>${escapeHTML(pullRequest.state)}</code>\n\n${escapeHTML(pullRequest.url)}`,
+        {
+          fallbackText: `PR #${pullRequest.number}\n${pullRequest.title}\n${pullRequest.state}\n\n${pullRequest.url}`,
+        },
+      );
+    } catch (error) {
+      await safeReply(ctx, `<b>Failed:</b> ${escapeHTML(friendlyErrorText(error))}`, {
+        fallbackText: `Failed: ${friendlyErrorText(error)}`,
+      });
+    }
+  });
+
   bot.command("new", async (ctx) => {
     const chatId = ctx.chat?.id;
     if (!chatId) {
@@ -987,6 +1091,24 @@ export function createBot(config: TeleCodexConfig, registry: SessionRegistry): B
       await safeReply(ctx, escapeHTML("Cannot create a new thread while a prompt is running."), {
         fallbackText: "Cannot create a new thread while a prompt is running.",
       });
+      return;
+    }
+
+    const selectedProject = registry.getSelectedProject(contextKey);
+    if (selectedProject) {
+      try {
+        const info = await session.newThread(selectedProject.path);
+        registry.resetProjectInstructions(contextKey);
+        updateSessionMetadata(contextKey, session);
+        const label = `New development thread created for ${selectedProject.name}.`;
+        await safeReply(ctx, `<b>${escapeHTML(label)}</b>\n\n${renderSessionInfoHTML(info)}`, {
+          fallbackText: `${label}\n\n${renderSessionInfoPlain(info)}`,
+        });
+      } catch (error) {
+        await safeReply(ctx, `<b>Failed:</b> ${escapeHTML(friendlyErrorText(error))}`, {
+          fallbackText: `Failed: ${friendlyErrorText(error)}`,
+        });
+      }
       return;
     }
 
@@ -1272,9 +1394,17 @@ export function createBot(config: TeleCodexConfig, registry: SessionRegistry): B
       return;
     }
 
-    if (!getThread(threadId)) {
+    const attachedThread = getThread(threadId);
+    if (!attachedThread) {
       await safeReply(ctx, `<b>Failed:</b> ${escapeHTML(`Unknown Codex thread: ${threadId}`)}`, {
         fallbackText: `Failed: Unknown Codex thread: ${threadId}`,
+      });
+      return;
+    }
+    const selectedProject = registry.getSelectedProject(contextKey);
+    if (selectedProject && attachedThread.cwd !== selectedProject.path) {
+      await safeReply(ctx, escapeHTML("That thread belongs to a different project."), {
+        fallbackText: "That thread belongs to a different project.",
       });
       return;
     }
@@ -1283,6 +1413,7 @@ export function createBot(config: TeleCodexConfig, registry: SessionRegistry): B
     busyState.switching = true;
     try {
       const info = await session.switchSession(threadId);
+      registry.resetProjectInstructions(contextKey);
       updateSessionMetadata(contextKey, session);
       const html = `<b>Attached to thread.</b>\n\n${renderSessionInfoHTML(info)}`;
       const plain = `Attached to thread.\n\n${renderSessionInfoPlain(info)}`;
@@ -1319,10 +1450,25 @@ export function createBot(config: TeleCodexConfig, registry: SessionRegistry): B
     const threadId = rawText.replace(/^\/(?:sessions|switch)(?:@\w+)?\s*/, "").trim();
 
     if (threadId) {
+      const selectedProject = registry.getSelectedProject(contextKey);
+      const targetThread = getThread(threadId);
+      if (!targetThread) {
+        await safeReply(ctx, escapeHTML(`Unknown Codex thread: ${threadId}`), {
+          fallbackText: `Unknown Codex thread: ${threadId}`,
+        });
+        return;
+      }
+      if (selectedProject && targetThread?.cwd !== selectedProject.path) {
+        await safeReply(ctx, escapeHTML("That thread belongs to a different project."), {
+          fallbackText: "That thread belongs to a different project.",
+        });
+        return;
+      }
       const busyState = getBusyState(contextKey);
       busyState.switching = true;
       try {
         const info = await session.switchSession(threadId);
+        registry.resetProjectInstructions(contextKey);
         updateSessionMetadata(contextKey, session);
         const html = `<b>Switched thread.</b>\n\n${renderSessionInfoHTML(info)}`;
         const plain = `Switched thread.\n\n${renderSessionInfoPlain(info)}`;
@@ -1337,7 +1483,10 @@ export function createBot(config: TeleCodexConfig, registry: SessionRegistry): B
       return;
     }
 
-    const sessions = session.listAllSessions(50);
+    const selectedProject = registry.getSelectedProject(contextKey);
+    const sessions = session
+      .listAllSessions(50)
+      .filter((listedSession) => !selectedProject || listedSession.cwd === selectedProject.path);
     if (sessions.length === 0) {
       await safeReply(ctx, escapeHTML("No recent threads found."), {
         fallbackText: "No recent threads found.",
@@ -1520,6 +1669,17 @@ export function createBot(config: TeleCodexConfig, registry: SessionRegistry): B
       return;
     }
 
+    const selectedProject = registry.getSelectedProject(contextKey);
+    const targetThread = getThread(threadId);
+    if (!targetThread) {
+      await ctx.answerCallbackQuery({ text: "That thread is no longer available" });
+      return;
+    }
+    if (selectedProject && targetThread?.cwd !== selectedProject.path) {
+      await ctx.answerCallbackQuery({ text: "That thread belongs to a different project" });
+      return;
+    }
+
     await ctx.answerCallbackQuery({ text: "Switching..." });
     pendingSessionPicks.delete(contextKey);
     pendingSessionButtons.delete(contextKey);
@@ -1528,6 +1688,7 @@ export function createBot(config: TeleCodexConfig, registry: SessionRegistry): B
     busyState.switching = true;
     try {
       const info = await session.switchSession(threadId);
+      registry.resetProjectInstructions(contextKey);
       updateSessionMetadata(contextKey, session);
       const plainText = `Switched session.\n\n${renderSessionInfoPlain(info)}`;
       const html = `<b>Switched session.</b>\n\n${renderSessionInfoHTML(info)}`;
@@ -1569,6 +1730,13 @@ export function createBot(config: TeleCodexConfig, registry: SessionRegistry): B
     const workspace = workspaces?.[index];
     if (!workspace) {
       await ctx.answerCallbackQuery({ text: "Expired, run /new again" });
+      return;
+    }
+
+    if (registry.getSelectedProject(contextKey)) {
+      pendingWorkspacePicks.delete(contextKey);
+      pendingWorkspaceButtons.delete(contextKey);
+      await ctx.answerCallbackQuery({ text: "Project selected. Run /new again." });
       return;
     }
 
@@ -2136,6 +2304,9 @@ export async function registerCommands(bot: Bot<Context>): Promise<void> {
     { command: "start", description: "Welcome & status" },
     { command: "help", description: "Command reference" },
     { command: "new", description: "Start a new thread" },
+    { command: "projects", description: "List registered projects" },
+    { command: "project", description: "View or select a project" },
+    { command: "pr", description: "Current branch pull request" },
     { command: "session", description: "Current thread details" },
     { command: "sessions", description: "Browse & switch threads" },
     { command: "retry", description: "Resend the last prompt" },
@@ -2167,6 +2338,20 @@ function renderSessionInfoPlain(info: CodexSessionInfo): string {
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+function prependProjectInstructions(input: CodexPromptInput, project: RegisteredProject): CodexPromptInput {
+  if (typeof input === "string") {
+    return withDevelopmentInstructions(project, input);
+  }
+
+  return {
+    ...input,
+    text: withDevelopmentInstructions(
+      project,
+      input.text ?? "Review the attached material and proceed with the requested development task.",
+    ),
+  };
 }
 
 function renderSessionInfoHTML(info: CodexSessionInfo): string {
