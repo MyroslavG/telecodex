@@ -1,0 +1,8 @@
+# Never bake deployment credentials or runtime state into the image.
+.env
+.git
+node_modules
+dist
+.telecodex
+data
+workspace
