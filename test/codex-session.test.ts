@@ -178,6 +178,16 @@ describe("CodexSessionService", () => {
     });
   });
 
+  it("passes a project GitHub profile through to the Codex CLI environment", async () => {
+    await CodexSessionService.create(createConfig(), {
+      environment: { GH_CONFIG_DIR: "/data/gh-profiles/company" },
+    });
+
+    expect(mockState.createdCodexOptions[0]?.env).toEqual(
+      expect.objectContaining({ GH_CONFIG_DIR: "/data/gh-profiles/company" }),
+    );
+  });
+
   it("create accepts overrides for workspace, model, reasoning effort, launch profile, and resumeThreadId", async () => {
     const service = await CodexSessionService.create(createConfig(), {
       workspace: "/workspace/resumed",

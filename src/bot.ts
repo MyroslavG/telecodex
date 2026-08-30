@@ -41,7 +41,12 @@ import { contextKeyFromCtx, isTopicContextKey, parseContextKey, type TelegramCon
 import { friendlyErrorText } from "./error-messages.js";
 import { escapeHTML, formatTelegramHTML } from "./format.js";
 import { SessionRegistry } from "./session-registry.js";
-import { getProjectById, renderProjectsPlain, type RegisteredProject } from "./projects.js";
+import {
+  getProjectById,
+  getProjectGitHubEnvironment,
+  renderProjectsPlain,
+  type RegisteredProject,
+} from "./projects.js";
 import { getAvailableBackends, transcribeAudio } from "./voice.js";
 
 const TELEGRAM_MESSAGE_LIMIT = 4000;
@@ -1054,7 +1059,10 @@ export function createBot(config: TeleCodexConfig, registry: SessionRegistry): B
       return;
     }
     try {
-      const pullRequest = await getCurrentPullRequest(project);
+      const pullRequest = await getCurrentPullRequest(
+        project,
+        getProjectGitHubEnvironment(project, config.githubProfilesRoot),
+      );
       if (!pullRequest) {
         await safeReply(ctx, escapeHTML("No pull request found for the current branch."), {
           fallbackText: "No pull request found for the current branch.",

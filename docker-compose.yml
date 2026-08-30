@@ -8,6 +8,7 @@ services:
       - ${PROJECTS_CONFIG_HOST:?Set PROJECTS_CONFIG_HOST in .env}:/data/config/projects.yml:ro
       - ${CODEX_HOME_HOST:-./data/codex}:/home/telecodex/.codex:rw
       - ${GH_CONFIG_HOME_HOST:-./data/gh}:/home/telecodex/.config/gh:rw
+      - ${GH_PROFILES_ROOT_HOST:-./data/gh-profiles}:/data/gh-profiles:rw
       - ${GIT_CONFIG_HOME_HOST:-./data/git}:/home/telecodex/.config/git:rw
       - ${SSH_DIR_HOST:-./data/ssh}:/home/telecodex/.ssh:ro
     cap_drop:

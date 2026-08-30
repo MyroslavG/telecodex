@@ -5,8 +5,10 @@ projects:
     name: Company API
     path: /data/projects/company-api
     base_branch: main
+    github_profile: company
 
   company-web:
     name: Company Web
     path: /data/projects/company-web
     base_branch: develop
+    github_profile: company

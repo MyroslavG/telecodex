@@ -113,6 +113,7 @@ describe("SessionRegistry", () => {
     enableTelegramReactions: false,
     projectsConfig: undefined,
     projectsRoot: "/projects",
+    githubProfilesRoot: undefined,
     projects: [],
     ...overrides,
   });
@@ -249,6 +250,31 @@ describe("SessionRegistry", () => {
     const reloaded = new SessionRegistry(config);
     expect(reloaded.getSelectedProject("67890:1")).toEqual(projects[0]);
     expect(reloaded.getSelectedProject("67890:2")).toEqual(projects[1]);
+  });
+
+  it("passes each selected project's GitHub profile to its isolated Codex session", async () => {
+    const projects = [
+      { id: "personal", name: "Personal", path: "/projects/personal", baseBranch: "main", githubProfile: "personal" },
+      { id: "company", name: "Company", path: "/projects/company", baseBranch: "main", githubProfile: "company" },
+    ];
+    const config = createConfig({ projects, githubProfilesRoot: "/data/gh-profiles" });
+    const registry = new SessionRegistry(config);
+
+    registry.setProject("67890:1", projects[0]!);
+    registry.setProject("67890:2", projects[1]!);
+    await registry.getOrCreate("67890:1", { deferThreadStart: true });
+    await registry.getOrCreate("67890:2", { deferThreadStart: true });
+
+    expect(mockSessionState.create).toHaveBeenNthCalledWith(
+      1,
+      config,
+      expect.objectContaining({ environment: { GH_CONFIG_DIR: path.join("/data/gh-profiles", "personal") } }),
+    );
+    expect(mockSessionState.create).toHaveBeenNthCalledWith(
+      2,
+      config,
+      expect.objectContaining({ environment: { GH_CONFIG_DIR: path.join("/data/gh-profiles", "company") } }),
+    );
   });
 
   it("restores distinct per-context workspace, model, reasoning effort, and thread ids", async () => {

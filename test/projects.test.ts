@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { loadProjectsConfig, renderProjectsPlain } from "../src/projects.js";
+import { getProjectGitHubEnvironment, loadProjectsConfig, renderProjectsPlain } from "../src/projects.js";
 
 describe("project configuration", () => {
   let tempDir: string;
@@ -34,13 +34,14 @@ describe("project configuration", () => {
         "    name: API",
         `    path: ${apiPath}`,
         "    base_branch: main",
+        "    github_profile: company",
       ].join("\n"),
     );
 
     const projects = loadProjectsConfig(configPath, projectsRoot);
 
     expect(projects).toEqual([
-      { id: "api", name: "API", path: apiPath, baseBranch: "main" },
+      { id: "api", name: "API", path: apiPath, baseBranch: "main", githubProfile: "company" },
       { id: "web", name: "Web App", path: webPath, baseBranch: "develop" },
     ]);
     expect(renderProjectsPlain(projects)).toContain("Web App (web)");
@@ -85,5 +86,36 @@ describe("project configuration", () => {
     );
 
     expect(() => loadProjectsConfig(configPath, projectsRoot)).toThrow("Invalid project id: ../../outside");
+  });
+
+  it("rejects invalid GitHub profile identifiers", () => {
+    const projectsRoot = path.join(tempDir, "projects");
+    const projectPath = path.join(projectsRoot, "api");
+    const configPath = path.join(tempDir, "projects.yml");
+    mkdirSync(projectPath, { recursive: true });
+    writeFileSync(
+      configPath,
+      [
+        "projects:",
+        "  api:",
+        "    name: API",
+        `    path: ${projectPath}`,
+        "    base_branch: main",
+        "    github_profile: ../../company",
+      ].join("\n"),
+    );
+
+    expect(() => loadProjectsConfig(configPath, projectsRoot)).toThrow(
+      "Project 'api' github_profile must be a valid identifier",
+    );
+  });
+
+  it("derives a project-scoped GitHub CLI environment", () => {
+    expect(
+      getProjectGitHubEnvironment(
+        { id: "api", name: "API", path: "/projects/api", baseBranch: "main", githubProfile: "company" },
+        "/data/gh-profiles",
+      ),
+    ).toEqual({ GH_CONFIG_DIR: path.join("/data/gh-profiles", "company") });
   });
 });

@@ -35,6 +35,7 @@ export interface TeleCodexConfig {
   enableTelegramReactions: boolean;
   projectsConfig?: string;
   projectsRoot: string;
+  githubProfilesRoot?: string;
   projects: RegisteredProject[];
 }
 
@@ -73,6 +74,13 @@ export function loadConfig(): TeleCodexConfig {
   const projectsConfig = resolveOptionalPath(optionalString(process.env.PROJECTS_CONFIG));
   const projectsRoot = resolveProjectsRoot();
   const projects = loadProjectsConfig(projectsConfig, projectsRoot);
+  const githubProfilesRoot = resolveOptionalPath(optionalString(process.env.GH_PROFILES_ROOT));
+  const profileProject = projects.find((project) => project.githubProfile);
+  if (profileProject && !githubProfilesRoot) {
+    throw new Error(
+      `Project '${profileProject.id}' uses github_profile, but GH_PROFILES_ROOT is not configured`,
+    );
+  }
 
   return {
     telegramBotToken,
@@ -93,6 +101,7 @@ export function loadConfig(): TeleCodexConfig {
     enableTelegramReactions,
     projectsConfig,
     projectsRoot,
+    githubProfilesRoot,
     projects,
   };
 }

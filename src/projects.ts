@@ -8,6 +8,7 @@ export interface RegisteredProject {
   name: string;
   path: string;
   baseBranch: string;
+  githubProfile?: string;
 }
 
 const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -44,6 +45,7 @@ export function loadProjectsConfig(
     const name = requiredString(definition.name, `Project '${id}' name`);
     const configuredPath = requiredString(definition.path, `Project '${id}' path`);
     const baseBranch = requiredString(definition.base_branch, `Project '${id}' base_branch`);
+    const githubProfile = optionalIdentifier(definition.github_profile, `Project '${id}' github_profile`);
     validateGitRef(baseBranch, id);
 
     const resolvedPath = validateDirectory(configuredPath, `Project '${id}' path`);
@@ -54,7 +56,7 @@ export function loadProjectsConfig(
       throw new Error(`Project '${id}' duplicates another project path`);
     }
     seenPaths.add(resolvedPath);
-    projects.push({ id, name, path: resolvedPath, baseBranch });
+    projects.push({ id, name, path: resolvedPath, baseBranch, ...(githubProfile ? { githubProfile } : {}) });
   }
 
   return projects.sort((left, right) => left.name.localeCompare(right.name));
@@ -74,6 +76,19 @@ export function renderProjectsPlain(projects: readonly RegisteredProject[]): str
   return ["Projects", "", ...projects.map((project, index) => `${index + 1}. ${project.name} (${project.id})`)].join(
     "\n",
   );
+}
+
+export function getProjectGitHubEnvironment(
+  project: RegisteredProject,
+  githubProfilesRoot: string | undefined,
+): Record<string, string> | undefined {
+  if (!project.githubProfile) {
+    return undefined;
+  }
+  if (!githubProfilesRoot) {
+    throw new Error(`Project '${project.id}' requires GH_PROFILES_ROOT for GitHub profile '${project.githubProfile}'`);
+  }
+  return { GH_CONFIG_DIR: path.join(githubProfilesRoot, project.githubProfile) };
 }
 
 function validateDirectory(targetPath: string, label: string): string {
@@ -100,6 +115,16 @@ function requiredString(value: unknown, label: string): string {
     throw new Error(`${label} must be a non-empty string`);
   }
   return value.trim();
+}
+
+function optionalIdentifier(value: unknown, label: string): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "string" || !PROJECT_ID_PATTERN.test(value)) {
+    throw new Error(`${label} must be a valid identifier`);
+  }
+  return value;
 }
 
 function validateGitRef(baseBranch: string, projectId: string): void {

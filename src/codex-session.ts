@@ -65,6 +65,7 @@ export interface CreateOptions {
   model?: string;
   reasoningEffort?: string;
   launchProfileId?: string;
+  environment?: Record<string, string>;
   deferThreadStart?: boolean;
   resumeThreadId?: string;
 }
@@ -81,6 +82,7 @@ export class CodexSessionService {
   private currentReasoningEffort: ModelReasoningEffort | undefined;
   private currentLaunchProfile: CodexLaunchProfile;
   private activeThreadLaunchProfile: CodexLaunchProfile | null = null;
+  private environment: Record<string, string> | undefined;
   private sessionTokens = { input: 0, cached: 0, output: 0 };
 
   private constructor(private readonly config: TeleCodexConfig) {
@@ -93,6 +95,7 @@ export class CodexSessionService {
     service.currentWorkspace = options?.workspace ?? config.workspace;
     service.currentModel = options?.model ?? config.codexModel;
     service.currentReasoningEffort = options?.reasoningEffort as ModelReasoningEffort | undefined;
+    service.environment = options?.environment;
     service.currentLaunchProfile = getLaunchProfile(
       config,
       options?.launchProfileId ?? config.defaultLaunchProfileId,
@@ -470,7 +473,7 @@ export class CodexSessionService {
       config: {
         approval_policy: this.currentLaunchProfile.approvalPolicy,
       },
-      env: buildCodexEnv(this.config.codexApiKey),
+      env: buildCodexEnv(this.config.codexApiKey, this.environment),
     });
   }
 }
@@ -483,7 +486,7 @@ function getLaunchProfile(config: TeleCodexConfig, profileId: string): CodexLaun
   return profile;
 }
 
-function buildCodexEnv(apiKey?: string): Record<string, string> {
+function buildCodexEnv(apiKey?: string, overrides?: Record<string, string>): Record<string, string> {
   const env: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(process.env)) {
@@ -492,11 +495,11 @@ function buildCodexEnv(apiKey?: string): Record<string, string> {
     }
   }
 
-  if (apiKey) {
-    env.CODEX_API_KEY = apiKey;
-  }
-
-  return env;
+  return {
+    ...env,
+    ...(apiKey ? { CODEX_API_KEY: apiKey } : {}),
+    ...overrides,
+  };
 }
 
 function computeTextDelta(previousText: string, nextText: string): string {

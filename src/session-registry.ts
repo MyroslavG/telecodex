@@ -5,7 +5,7 @@ import { findLaunchProfile } from "./codex-launch.js";
 import { CodexSessionService } from "./codex-session.js";
 import type { TeleCodexConfig } from "./config.js";
 import type { TelegramContextKey } from "./context-key.js";
-import { getProjectById, type RegisteredProject } from "./projects.js";
+import { getProjectById, getProjectGitHubEnvironment, type RegisteredProject } from "./projects.js";
 
 export interface ContextMetadata {
   contextKey: TelegramContextKey;
@@ -45,11 +45,13 @@ export class SessionRegistry {
     if (meta?.projectId && !project) {
       throw new Error("The selected project is no longer configured. Use /project to select one.");
     }
+    const environment = project ? getProjectGitHubEnvironment(project, this.config.githubProfilesRoot) : undefined;
     session = await CodexSessionService.create(this.config, {
       workspace: project?.path ?? meta?.workspace,
       model: meta?.model,
       reasoningEffort: meta?.reasoningEffort,
       launchProfileId,
+      ...(environment ? { environment } : {}),
       deferThreadStart: options?.deferThreadStart && !meta?.threadId,
       resumeThreadId: meta?.threadId ?? undefined,
     });

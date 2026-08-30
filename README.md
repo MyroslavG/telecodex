@@ -69,6 +69,7 @@ TeleCodex is a Telegram bridge for the OpenAI Codex CLI SDK. It keeps a Codex th
    | `OPENAI_API_KEY` | — | Enables OpenAI Whisper voice transcription fallback |
    | `PROJECTS_CONFIG` | — | Server-owned YAML file registering approved repositories |
    | `PROJECTS_ROOT` | — | Directory that contains every registered project; configured paths outside it are rejected |
+   | `GH_PROFILES_ROOT` | — | Directory containing isolated GitHub CLI profiles selected by a project `github_profile` |
 
 4. Start the bot:
    ```bash
@@ -110,11 +111,18 @@ projects:
     name: Kolo
     path: /data/projects/kolo
     base_branch: main
+    github_profile: personal
 ```
 
 Every path must be an existing absolute directory below `PROJECTS_ROOT`; symlink escapes, duplicate paths, invalid identifiers, and arbitrary Telegram paths are rejected at startup. Project selection is persisted separately for each private chat or forum topic. Selecting another project prepares a fresh thread for that context.
 
 Use `/projects`, `/project kolo`, and `/new`. The selected repository becomes the Codex working directory. On the first prompt of each project thread, TeleCodex adds instructions to inspect the repository, update the configured base branch, create an `agent/...` feature branch, run tests, push only that branch, and create or update a PR when asked. It explicitly forbids direct base-branch pushes, force pushes, merges, remote rewrites, deployment, production data changes, and access to unrelated repositories.
+
+#### GitHub account profiles
+
+Set `github_profile` on a project when it must use a different GitHub.com account. TeleCodex passes the selected profile as `GH_CONFIG_DIR` only to that project's Codex process and `/pr` command, so accounts are not globally switched when you move between projects or Telegram topics. Create one directory below `GH_PROFILES_ROOT` for each profile, authenticate GitHub CLI into that directory, and configure each repository's Git author identity locally.
+
+For example, `github_profile: personal` uses `/data/gh-profiles/personal`; `github_profile: company` uses `/data/gh-profiles/company`. A project without this field keeps using the legacy shared GitHub CLI configuration.
 
 ### Voice, image & file input
 

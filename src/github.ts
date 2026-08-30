@@ -9,8 +9,11 @@ export interface PullRequestInfo {
   state: string;
 }
 
-export async function getCurrentPullRequest(project: RegisteredProject): Promise<PullRequestInfo | null> {
-  const output = await runGh(project.path, ["pr", "view", "--json", "number,title,url,state"]);
+export async function getCurrentPullRequest(
+  project: RegisteredProject,
+  environment?: Record<string, string>,
+): Promise<PullRequestInfo | null> {
+  const output = await runGh(project.path, ["pr", "view", "--json", "number,title,url,state"], environment);
   if (output === null) {
     return null;
   }
@@ -31,9 +34,9 @@ export function parsePullRequestOutput(output: string): PullRequestInfo | null {
   return { number: parsed.number, title: parsed.title, url: parsed.url, state: parsed.state };
 }
 
-function runGh(cwd: string, args: string[]): Promise<string | null> {
+function runGh(cwd: string, args: string[], environment?: Record<string, string>): Promise<string | null> {
   return new Promise((resolve, reject) => {
-    execFile("gh", args, { cwd, encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile("gh", args, { cwd, env: { ...process.env, ...environment }, encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) {
         const detail = (stderr || error.message).trim();
         if (/no pull requests? found/i.test(detail)) {
