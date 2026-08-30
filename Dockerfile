@@ -1,6 +1,7 @@
 FROM node:22-alpine
 
-RUN apk add --no-cache git github-cli openssh-client bash
+RUN apk add --no-cache git github-cli openssh-client bash \
+  && npm install --global pnpm
 
 WORKDIR /app
 
