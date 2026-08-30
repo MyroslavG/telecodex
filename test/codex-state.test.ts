@@ -270,13 +270,14 @@ describe("codex-state", () => {
           { slug: "gpt-5.4", display_name: "GPT-5.4" },
           { slug: "secret", display_name: "Secret", visibility: "hidden" },
           { slug: "o3", display_name: "o3", visibility: "public" },
+          { slug: "account-only", display_name: "Account only", visibility: "public" },
         ],
       }),
     });
 
     expect(state.listModels()).toEqual([
-      { slug: "gpt-5.4", displayName: "GPT-5.4" },
-      { slug: "o3", displayName: "o3" },
+      ...state.FALLBACK_MODELS,
+      { slug: "account-only", displayName: "Account only" },
     ]);
   });
 

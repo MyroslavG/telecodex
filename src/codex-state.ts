@@ -17,6 +17,9 @@ export interface CodexModelRecord {
 }
 
 export const FALLBACK_MODELS: CodexModelRecord[] = [
+  { slug: "gpt-5.6-sol", displayName: "GPT-5.6 Sol" },
+  { slug: "gpt-5.6-terra", displayName: "GPT-5.6 Terra" },
+  { slug: "gpt-5.6-luna", displayName: "GPT-5.6 Luna" },
   { slug: "gpt-5.4", displayName: "GPT-5.4" },
   { slug: "gpt-5.4-mini", displayName: "GPT-5.4-Mini" },
   { slug: "gpt-5", displayName: "GPT-5" },
@@ -150,10 +153,24 @@ export function listModels(): CodexModelRecord[] {
       }))
       .filter((model) => model.slug && model.displayName);
 
-    return models.length > 0 ? models : FALLBACK_MODELS;
+    return models.length > 0 ? mergeModelLists(FALLBACK_MODELS, models) : FALLBACK_MODELS;
   } catch {
     return FALLBACK_MODELS;
   }
+}
+
+function mergeModelLists(
+  preferredModels: readonly CodexModelRecord[],
+  cachedModels: readonly CodexModelRecord[],
+): CodexModelRecord[] {
+  const seenSlugs = new Set<string>();
+  return [...preferredModels, ...cachedModels].filter((model) => {
+    if (seenSlugs.has(model.slug)) {
+      return false;
+    }
+    seenSlugs.add(model.slug);
+    return true;
+  });
 }
 
 function mapThreadRow(row: ThreadRow): CodexThreadRecord {

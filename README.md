@@ -16,7 +16,7 @@ TeleCodex is a Telegram bridge for the OpenAI Codex CLI SDK. It keeps a Codex th
 - **Pull request status** — `/pr` shows the current branch PR through the GitHub CLI
 - **Telegram login** — `/login` authenticates against the Codex CLI via device auth flow, no terminal needed
 - **Launch profiles** — `/launch_profiles` selects the sandbox + approval mode for new or reattached threads in the current Telegram context (`/launch` remains an alias)
-- **Model picker** — `/model` shows available models and lets you switch for new threads
+- **Model picker** — `/model` shows current GPT-5.6 options plus models available to the authenticated Codex account
 - **Reasoning effort** — `/effort` lets you dial from `minimal` to `xhigh` for new threads
 - **Optional message reactions** — 👀 while processing, 👍 on success when enabled; silently degrades in chats without reaction support
 - **Friendly errors** — common SDK and network errors are translated to actionable messages with command hints
