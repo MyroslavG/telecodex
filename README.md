@@ -70,6 +70,8 @@ TeleCodex is a Telegram bridge for the OpenAI Codex CLI SDK. It keeps a Codex th
    | `PROJECTS_CONFIG` | — | Server-owned YAML file registering approved repositories |
    | `PROJECTS_ROOT` | — | Directory that contains every registered project; configured paths outside it are rejected |
    | `GH_PROFILES_ROOT` | — | Directory containing isolated GitHub CLI profiles selected by a project `github_profile` |
+   | `TELECODEX_MEMORY_LIMIT` | — | Docker memory limit (default `2G`; leave host memory for Ubuntu and Docker) |
+   | `TELECODEX_CPU_LIMIT` | — | Docker CPU limit (default `2.0`; do not exceed the Droplet's vCPU count) |
 
 4. Start the bot:
    ```bash
@@ -267,6 +269,7 @@ The compose file:
 - includes `git`, `gh`, OpenSSH, and the Codex CLI bundled by the SDK dependency
 - persists Codex auth/state, GitHub CLI auth, and Git configuration in separate host mounts
 - mounts the project root at `/data/projects` and the project registry read-only at `/data/config/projects.yml`
+- limits the container with configurable `TELECODEX_MEMORY_LIMIT` and `TELECODEX_CPU_LIMIT` values
 
 `PROJECTS_ROOT_HOST` and `PROJECTS_CONFIG_HOST` are required compose variables. The remaining host-path variables in `.env.example` have local defaults, but use protected absolute server paths in production.
 

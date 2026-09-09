@@ -18,6 +18,6 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
-          cpus: "2.0"
+          memory: "${TELECODEX_MEMORY_LIMIT:-2G}"
+          cpus: "${TELECODEX_CPU_LIMIT:-2.0}"
     restart: unless-stopped
